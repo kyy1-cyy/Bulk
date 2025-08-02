@@ -142,6 +142,10 @@ def serve_public_json():
         return send_file(json_path)
     return "File not found", 404
 
+@app.route('/ping')
+def ping():
+    return 'OK', 200
+
 if __name__ == "__main__":
     print("Starting Flask app on http://0.0.0.0:5000")
     update_public_json()
