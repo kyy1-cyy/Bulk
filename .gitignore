@@ -1,3 +1,6 @@
+# macOS
+.DS_Store
+
 # Python
 __pycache__/
 *.pyc
@@ -8,3 +11,6 @@ env/
 
 # Uploads
 uploads/
+
+# Node
+node_modules/
