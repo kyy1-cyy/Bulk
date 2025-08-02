@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Game List</title>
+</head>
+<body>
+  <h1>Game List</h1>
+  <ul>
+    {% for file in files %}
+      <li>
+        {{ file.name }}
+        - <a href="{{ url_for('serve_file', filename=file.name) }}" download>Download ZIP</a>
+      </li>
+    {% endfor %}
+  </ul>
+</body>
+</html>

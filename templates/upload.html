@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>TRD Upload</title>
+  <style>
+    body {
+      background-color: #1a1a1a;
+      color: #f0f0f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 2em;
+      display: flex;
+      justify-content: center;
+    }
+    .container {
+      width: 100%;
+      max-width: 800px;
+    }
+    h1 {
+      text-align: center;
+      font-size: 2.5em;
+      color: #fff;
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+      margin-bottom: 1em;
+    }
+    #upload-form {
+      background-color: #2a2a2a;
+      padding: 2em;
+      border-radius: 15px;
+      text-align: center;
+      border: 1px solid #333;
+    }
+    input[type="file"] {
+      display: none;
+    }
+    .file-label {
+      background-color: #007bff;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      display: inline-block;
+      margin-bottom: 1em;
+    }
+    button[type="submit"] {
+      background-color: #28a745;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 1em;
+    }
+    .game-list-container, .uploading-container {
+      background-color: #2a2a2a;
+      border: 1px solid #333;
+      border-radius: 15px;
+      padding: 2em;
+      margin-top: 2em;
+    }
+    .file-item {
+      padding: 1em;
+      border-bottom: 1px solid #333;
+    }
+    .file-item:last-child {
+      border-bottom: none;
+    }
+    .progress-container {
+      width: 100%;
+      background: #444;
+      border-radius: 5px;
+      height: 10px;
+      margin-top: 5px;
+    }
+    .progress-bar {
+      width: 0;
+      height: 10px;
+      background: #007bff;
+      border-radius: 5px;
+      transition: width 0.2s;
+    }
+    a {
+      color: #00aaff;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    #games-list {
+      max-height: 300px;
+      overflow-y: auto;
+      padding-right: 1em;
+    }
+    #file-count {
+      margin-left: 1em;
+      font-style: italic;
+      color: #ccc;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>TRD Upload</h1>
+    {% if error %}
+    <p style="color:red; text-align:center;">{{ error }}</p>
+    {% endif %}
+    <form id="upload-form" method="POST" enctype="multipart/form-data" action="{{ url_for('upload_page') }}">
+      <label for="file-input" class="file-label">Choose Zip Files</label>
+      <span id="file-count"></span>
+      <input type="file" id="file-input" name="files[]" multiple accept=".zip" />
+      <br />
+      <button type="submit">Upload Selected Files</button>
+    </form>
+
+    <div class="uploading-container" style="display: none;">
+      <h2>Uploading...</h2>
+      <div id="upload-list"></div>
+    </div>
+
+    <div class="game-list-container">
+      <h2>Games List</h2>
+      <div id="games-list">
+        {% for file in files %}
+          <div class="file-item">
+            <a href="{{ file.url }}">{{ file.name }}</a>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+<script>
+  const form = document.getElementById("upload-form");
+  const fileInput = document.getElementById("file-input");
+  const uploadList = document.getElementById("upload-list");
+  const fileCount = document.getElementById("file-count");
+
+  fileInput.addEventListener('change', () => {
+    const numFiles = fileInput.files.length;
+    if (numFiles > 0) {
+      fileCount.textContent = `${numFiles} file${numFiles > 1 ? 's' : ''} selected`;
+    } else {
+      fileCount.textContent = '';
+    }
+  });
+
+  form.addEventListener("submit", e => {
+    e.preventDefault();
+    const files = fileInput.files;
+    if (!files.length) {
+      alert("Please select one or more zip files.");
+      return;
+    }
+    uploadList.innerHTML = "";
+    document.querySelector('.uploading-container').style.display = 'block';
+    uploadFiles(Array.from(files));
+  });
+
+  async function uploadFiles(files) {
+    for (const file of files) {
+      await uploadSingleFile(file);
+    }
+  }
+
+  function createFileItem(filename) {
+    const div = document.createElement("div");
+    div.className = "file-item";
+    div.innerHTML = `
+      <strong>${filename}</strong>
+      <div class="progress-container"><div class="progress-bar" id="progress-${filename.replace(/[^a-z0-9]/gi, '')}"></div></div>
+      <div>Status: <span id="status-${filename.replace(/[^a-z0-9]/gi, '')}">Waiting</span></div>
+      <div>Download: <a href="#" target="_blank" id="download-${filename.replace(/[^a-z0-9]/gi, '')}">N/A</a></div>
+    `;
+    uploadList.appendChild(div);
+    return div;
+  }
+
+  function updateProgress(filename, percent) {
+    const bar = document.getElementById("progress-" + filename.replace(/[^a-z0-9]/gi, ''));
+    if (bar) bar.style.width = percent + "%";
+  }
+
+  function updateStatus(filename, text) {
+    const status = document.getElementById("status-" + filename.replace(/[^a-z0-9]/gi, ''));
+    if (status) status.textContent = text;
+  }
+
+  function updateDownloadLink(filename, url) {
+    const link = document.getElementById("download-" + filename.replace(/[^a-z0-9]/gi, ''));
+    if (link) {
+      link.href = url;
+      link.textContent = filename;
+
+      const gameList = document.getElementById("games-list");
+      const fileItem = document.getElementById("progress-" + filename.replace(/[^a-z0-9]/gi, '')).closest(".file-item");
+      
+      const newGame = document.createElement("div");
+      newGame.className = "file-item";
+      newGame.innerHTML = `<a href="${url}">${filename}</a>`;
+      gameList.appendChild(newGame);
+
+      if (fileItem) {
+        fileItem.remove();
+      }
+      if (document.getElementById('upload-list').children.length === 0) {
+        document.querySelector('.uploading-container').style.display = 'none';
+      }
+    }
+  }
+
+  async function uploadSingleFile(file) {
+    const filenameKey = file.name.replace(/[^a-z0-9]/gi, '');
+
+    createFileItem(file.name);
+    updateStatus(file.name, "Uploading...");
+
+    const formData = new FormData();
+    formData.append("files[]", file);
+
+    try {
+      const response = await fetch("{{ url_for('upload_page') }}", {
+        method: "POST",
+        body: formData,
+      });
+      if (!response.ok) throw new Error("Upload failed");
+      const data = await response.json();
+
+      const task = data.tasks.find(t => t.original_name.replace(/[^a-z0-9]/gi, '').toLowerCase() === file.name.replace(/[^a-z0-9]/gi, '').toLowerCase());
+      if (!task) throw new Error("Task ID missing");
+
+      updateStatus(file.name, "Processing...");
+
+      // Poll progress
+      await pollProgress(task.task_id, file.name, task.download_url);
+    } catch (err) {
+      updateStatus(file.name, "Error: " + err.message);
+    }
+  }
+
+  async function pollProgress(taskId, filename, downloadUrl) {
+    return new Promise((resolve) => {
+      const interval = setInterval(async () => {
+        try {
+          const res = await fetch(`{{ url_for('progress_status', task_id='') }}${taskId}`);
+          const data = await res.json();
+          if (data.progress >= 0) {
+            updateProgress(filename, data.progress);
+            updateStatus(filename, `${data.progress}%`);
+            if (data.progress >= 100) {
+              clearInterval(interval);
+              updateStatus(filename, "Done");
+              updateDownloadLink(filename, downloadUrl);
+              resolve();
+            }
+          } else {
+            updateStatus(filename, "Error during processing");
+            clearInterval(interval);
+            resolve();
+          }
+        } catch (err) {
+          updateStatus(filename, "Error fetching progress");
+          clearInterval(interval);
+          resolve();
+        }
+      }, 500);
+    });
+  }
+</script>
+</body>
+</html>
